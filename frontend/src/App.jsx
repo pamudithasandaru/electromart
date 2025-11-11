@@ -4,14 +4,19 @@ import axios from 'axios'
 export default function App() {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
+        console.log('Fetching /api/products...')
         const res = await axios.get('/api/products')
+        console.log('Got products:', res.data)
         setProducts(res.data)
+        setError(null)
       } catch (err) {
-        console.error('Failed to load products', err)
+        console.error('Failed to load products:', err)
+        setError(err.message)
       } finally {
         setLoading(false)
       }
@@ -26,6 +31,12 @@ export default function App() {
 
       {loading ? (
         <p>Loading...</p>
+      ) : error ? (
+        <div style={{ color: 'red', padding: 10, border: '1px solid red', borderRadius: 4 }}>
+          <strong>Error:</strong> {error}
+          <br />
+          <small>Make sure the backend is running on http://localhost:5000</small>
+        </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
           {products.length === 0 && <div>No products yet. Add some via API.</div>}

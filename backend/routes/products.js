@@ -5,12 +5,15 @@ const Product = require('../models/product');
 // GET /api/products - list products
 router.get('/', async (req, res) => {
   try {
-    const products = await Product.find().limit(50);
-    res.json(products);
+    console.log('GET /api/products called')
+    const products = await Product.find().limit(50)
+    console.log(`Found ${products.length} products`)
+    res.json(products)
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch products' });
+    console.error('Error fetching products:', err.message)
+    res.status(500).json({ error: 'Failed to fetch products', details: err.message })
   }
-});
+})
 
 // POST /api/products - create product
 router.post('/', async (req, res) => {
