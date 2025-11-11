@@ -1,0 +1,172 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'ElectroMart ECS Deployment Infrastructure'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: electromart
+    Description: Project name for resource naming
+  
+  AwsRegion:
+    Type: String
+    Default: us-east-1
+    Description: AWS region for deployment
+  
+  BackendImageUri:
+    Type: String
+    Description: Backend Docker image URI in ECR
+  
+  FrontendImageUri:
+    Type: String
+    Description: Frontend Docker image URI in ECR
+  
+  MongoDbUri:
+    Type: String
+    NoEcho: true
+    Description: MongoDB Atlas connection string
+
+Resources:
+  # IAM Role for ECS Task Execution
+  EcsTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+  # CloudWatch Log Group for Backend
+  BackendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${ProjectName}-backend'
+      RetentionInDays: 30
+
+  # CloudWatch Log Group for Frontend
+  FrontendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${ProjectName}-frontend'
+      RetentionInDays: 30
+
+  # ECS Cluster
+  EcsCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub '${ProjectName}-cluster'
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+
+  # Backend Task Definition
+  BackendTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${ProjectName}-backend'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: '256'
+      Memory: '512'
+      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: backend
+          Image: !Ref BackendImageUri
+          PortMappings:
+            - ContainerPort: 5000
+              HostPort: 5000
+              Protocol: tcp
+          Environment:
+            - Name: PORT
+              Value: '5000'
+          Secrets:
+            - Name: MONGODB_URI
+              ValueFrom: !Sub 'arn:aws:secretsmanager:${AwsRegion}:${AWS::AccountId}:secret:${ProjectName}/mongodb-uri'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref BackendLogGroup
+              awslogs-region: !Ref AwsRegion
+              awslogs-stream-prefix: ecs
+
+  # Frontend Task Definition
+  FrontendTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${ProjectName}-frontend'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: '256'
+      Memory: '512'
+      ExecutionRoleArn: !GetAtt EcsTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: frontend
+          Image: !Ref FrontendImageUri
+          PortMappings:
+            - ContainerPort: 80
+              HostPort: 80
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref FrontendLogGroup
+              awslogs-region: !Ref AwsRegion
+              awslogs-stream-prefix: ecs
+
+  # Security Group for ALB
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'Security group for ${ProjectName} ALB'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  # Security Group for ECS Tasks
+  EcsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'Security group for ${ProjectName} ECS tasks'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5000
+          ToPort: 5000
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+
+Outputs:
+  ClusterName:
+    Value: !Ref EcsCluster
+    Description: ECS Cluster Name
+  
+  BackendTaskDefinitionArn:
+    Value: !Ref BackendTaskDefinition
+    Description: Backend Task Definition ARN
+  
+  FrontendTaskDefinitionArn:
+    Value: !Ref FrontendTaskDefinition
+    Description: Frontend Task Definition ARN
+  
+  BackendLogGroupName:
+    Value: !Ref BackendLogGroup
+    Description: Backend CloudWatch Log Group
+  
+  FrontendLogGroupName:
+    Value: !Ref FrontendLogGroup
+    Description: Frontend CloudWatch Log Group
