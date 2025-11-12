@@ -1,10 +1,6 @@
 pipeline {
     agent any
-
-    tools {
-        nodejs "NodeJS 20"
-    }
-
+    
     environment {
         AWS_REGION = 'ap-south-1'
         AWS_ACCOUNT_ID = 391277995980
@@ -13,13 +9,13 @@ pipeline {
         FRONTEND_REPO = 'electromart-frontend'
         IMAGE_TAG = "build-${BUILD_NUMBER}"
     }
-
+    
     options {
         timeout(time: 30, unit: 'MINUTES')
         timestamps()
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
-
+    
     stages {
         stage('🔍 Checkout') {
             steps {
@@ -29,18 +25,7 @@ pipeline {
                 }
             }
         }
-
-        stage('Check Node & npm versions') {
-            steps {
-                sh '''
-                echo "NodeJS Version:"
-                node -v
-                echo "npm Version:"
-                npm -v
-                '''
-            }
-        }
-
+        
         stage('✅ Build Backend') {
             steps {
                 dir('backend') {
@@ -55,7 +40,7 @@ pipeline {
                 }
             }
         }
-
+        
         stage('✅ Build Frontend') {
             steps {
                 dir('frontend') {
@@ -68,48 +53,51 @@ pipeline {
                 }
             }
         }
-
+        
         stage('🐳 Build Docker Images') {
             steps {
                 script {
                     echo "🐳 Building backend Docker image..."
                     sh 'docker build -t ${ECR_REGISTRY}/${BACKEND_REPO}:${IMAGE_TAG} -t ${ECR_REGISTRY}/${BACKEND_REPO}:latest ./backend'
-
+                    
                     echo "🐳 Building frontend Docker image..."
                     sh 'docker build -t ${ECR_REGISTRY}/${FRONTEND_REPO}:${IMAGE_TAG} -t ${ECR_REGISTRY}/${FRONTEND_REPO}:latest ./frontend'
                 }
             }
         }
-
+        
         stage('🔐 Push to ECR') {
             steps {
                 script {
                     echo "🔐 Logging into ECR..."
                     sh 'aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}'
-
+                    
                     echo "📤 Pushing backend image..."
                     sh 'docker push ${ECR_REGISTRY}/${BACKEND_REPO}:${IMAGE_TAG}'
                     sh 'docker push ${ECR_REGISTRY}/${BACKEND_REPO}:latest'
-
+                    
                     echo "📤 Pushing frontend image..."
                     sh 'docker push ${ECR_REGISTRY}/${FRONTEND_REPO}:${IMAGE_TAG}'
                     sh 'docker push ${ECR_REGISTRY}/${FRONTEND_REPO}:latest'
                 }
             }
         }
-
+        
         stage('🚀 Deploy to ECS') {
-            when { branch 'main' }
+            when {
+                branch 'main'
+            }
             steps {
                 script {
                     echo "🚀 Updating ECS services..."
+                    
                     sh '''
                     aws ecs update-service \
                         --cluster electromart-cluster \
                         --service electromart-backend \
                         --force-new-deployment \
                         --region ${AWS_REGION}
-
+                    
                     aws ecs update-service \
                         --cluster electromart-cluster \
                         --service electromart-frontend \
@@ -119,9 +107,11 @@ pipeline {
                 }
             }
         }
-
+        
         stage('✔️ Verify Deployment') {
-            when { branch 'main' }
+            when {
+                branch 'main'
+            }
             steps {
                 script {
                     echo "✔️ Checking service status..."
@@ -136,7 +126,7 @@ pipeline {
             }
         }
     }
-
+    
     post {
         always {
             script {
