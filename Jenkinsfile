@@ -1,144 +1,74 @@
 pipeline {
     agent any
-    
+
     environment {
-        AWS_REGION = 'ap-south-1'
-        AWS_ACCOUNT_ID = 391277995980
-        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        BACKEND_REPO = 'electromart-backend'
-        FRONTEND_REPO = 'electromart-frontend'
-        IMAGE_TAG = "build-${BUILD_NUMBER}"
+        // Docker Hub image names (update if you want a different repo/org)
+        FRONTEND_IMAGE = "electromart-backend"
+        BACKEND_IMAGE  = "electromart-frontend"
+        // Point to your repository (this repo) so the job clones the correct code
+        GIT_REPO = "https://github.com/pamudithasandaru/electromart.git"
     }
-    
-    options {
-        timeout(time: 30, unit: 'MINUTES')
-        timestamps()
-        buildDiscarder(logRotator(numToKeepStr: '10'))
-    }
-    
+
     stages {
-        stage('🔍 Checkout') {
+        stage('Clone Repository') {
             steps {
-                checkout scm
-                script {
-                    env.GIT_COMMIT_SHORT = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
-                }
+                // clone the repository (main branch)
+                git branch: 'main', url: "${GIT_REPO}"
             }
         }
-        
-        stage('✅ Build Backend') {
-            steps {
-                dir('backend') {
-                    script {
-                        echo "📦 Installing backend dependencies..."
-                        sh 'npm ci'
-                        echo "🧪 Running linter..."
-                        sh 'npm run lint || true'
-                        echo "🧪 Running tests..."
-                        sh 'npm test || true'
-                    }
-                }
-            }
-        }
-        
-        stage('✅ Build Frontend') {
-            steps {
-                dir('frontend') {
-                    script {
-                        echo "📦 Installing frontend dependencies..."
-                        sh 'npm ci'
-                        echo "🏗️  Building frontend..."
-                        sh 'npm run build'
-                    }
-                }
-            }
-        }
-        
-        stage('🐳 Build Docker Images') {
+
+        stage('Build Frontend Docker Image') {
             steps {
                 script {
-                    echo "🐳 Building backend Docker image..."
-                    sh 'docker build -t ${ECR_REGISTRY}/${BACKEND_REPO}:${IMAGE_TAG} -t ${ECR_REGISTRY}/${BACKEND_REPO}:latest ./backend'
-                    
-                    echo "🐳 Building frontend Docker image..."
-                    sh 'docker build -t ${ECR_REGISTRY}/${FRONTEND_REPO}:${IMAGE_TAG} -t ${ECR_REGISTRY}/${FRONTEND_REPO}:latest ./frontend'
+                    echo "Building frontend image from ./frontend/Dockerfile"
+                    sh "docker build -t ${FRONTEND_IMAGE}:latest -f frontend/Dockerfile ./frontend"
                 }
             }
         }
-        
-        stage('🔐 Push to ECR') {
+
+        stage('Build Backend Docker Image') {
             steps {
                 script {
-                    echo "🔐 Logging into ECR..."
-                    sh 'aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}'
-                    
-                    echo "📤 Pushing backend image..."
-                    sh 'docker push ${ECR_REGISTRY}/${BACKEND_REPO}:${IMAGE_TAG}'
-                    sh 'docker push ${ECR_REGISTRY}/${BACKEND_REPO}:latest'
-                    
-                    echo "📤 Pushing frontend image..."
-                    sh 'docker push ${ECR_REGISTRY}/${FRONTEND_REPO}:${IMAGE_TAG}'
-                    sh 'docker push ${ECR_REGISTRY}/${FRONTEND_REPO}:latest'
+                    echo "Building backend image from ./backend/Dockerfile"
+                    sh "docker build -t ${BACKEND_IMAGE}:latest -f backend/Dockerfile ./backend"
                 }
             }
         }
-        
-        stage('🚀 Deploy to ECS') {
-            when {
-                branch 'main'
-            }
+
+        stage('Login to Docker Hub') {
             steps {
-                script {
-                    echo "🚀 Updating ECS services..."
-                    
+                // expects a usernamePassword credential with id 'dockerhub'
+                withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh '''
-                    aws ecs update-service \
-                        --cluster electromart-cluster \
-                        --service electromart-backend \
-                        --force-new-deployment \
-                        --region ${AWS_REGION}
-                    
-                    aws ecs update-service \
-                        --cluster electromart-cluster \
-                        --service electromart-frontend \
-                        --force-new-deployment \
-                        --region ${AWS_REGION}
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
                     '''
                 }
             }
         }
-        
-        stage('✔️ Verify Deployment') {
-            when {
-                branch 'main'
-            }
+
+        stage('Push Docker Images') {
             steps {
                 script {
-                    echo "✔️ Checking service status..."
-                    sh '''
-                    sleep 10
-                    aws ecs describe-services \
-                        --cluster electromart-cluster \
-                        --services electromart-backend electromart-frontend \
-                        --region ${AWS_REGION} | jq '.services[] | {name: .serviceName, running: .runningCount, desired: .desiredCount}'
-                    '''
+                    echo "Pushing images to Docker Hub"
+                    sh "docker push ${FRONTEND_IMAGE}:latest"
+                    sh "docker push ${BACKEND_IMAGE}:latest"
                 }
             }
         }
     }
-    
+
     post {
         always {
             script {
-                echo "🧹 Cleaning up workspace..."
-                cleanWs()
+                // ensure logout to avoid leaving credentials in session
+                sh 'docker logout || true'
             }
         }
         success {
-            echo "✅ Pipeline succeeded! Commit: ${GIT_COMMIT_SHORT}"
+            echo "Pipeline finished successfully"
         }
         failure {
-            echo "❌ Pipeline failed!"
+            echo "Pipeline failed - check logs"
         }
     }
 }
