@@ -2,8 +2,8 @@ pipeline {
     agent any
     
     environment {
-        AWS_REGION = 'us-east-1'
-        AWS_ACCOUNT_ID = credentials('aws-account-id')
+        AWS_REGION = 'ap-south-1'
+        AWS_ACCOUNT_ID = 391277995980
         ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         BACKEND_REPO = 'electromart-backend'
         FRONTEND_REPO = 'electromart-frontend'
