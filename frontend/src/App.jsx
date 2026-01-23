@@ -1,10 +1,44 @@
 import React, { useEffect, useState } from 'react'
 import axios from 'axios'
+import AuthModal from './AuthModal'
+import Cart from './Cart'
 
 export default function App() {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [user, setUser] = useState(null)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+  const [showCart, setShowCart] = useState(false)
+  const [cartData, setCartData] = useState({ items: [], totalPrice: 0, totalItems: 0 })
+
+  // Check for existing user session
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user')
+    if (storedUser) {
+      setUser(JSON.parse(storedUser))
+      fetchCart()
+    }
+  }, [])
+
+  // Fetch user's cart
+  const fetchCart = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) return
+
+      const res = await axios.get('/api/cart', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      
+      if (res.data.success) {
+        setCartData(res.data.cart)
+      }
+    } catch (err) {
+      console.error('Fetch cart error:', err)
+    }
+  }
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -24,21 +58,112 @@ export default function App() {
     fetchProducts()
   }, [])
 
+  // Filter products based on search term
+  const filteredProducts = products.filter((p) =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.description.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    setUser(null)
+    setCartData({ items: [], totalPrice: 0, totalItems: 0 })
+  }
+
+  const handleAuthSuccess = (userData) => {
+    setUser(userData)
+    setShowAuthModal(false)
+    fetchCart()
+  }
+
+  const handleAddToCart = async (product) => {
+    if (!user) {
+      alert('Please sign in to add items to cart')
+      setShowAuthModal(true)
+      return
+    }
+
+    try {
+      const token = localStorage.getItem('token')
+      const res = await axios.post(
+        '/api/cart/add',
+        { productId: product._id, quantity: 1 },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      
+      if (res.data.success) {
+        setCartData(res.data.cart)
+        // Show brief success message
+        const btn = event.target
+        const originalText = btn.textContent
+        btn.textContent = '✓ Added!'
+        btn.style.background = '#4caf50'
+        setTimeout(() => {
+          btn.textContent = originalText
+          btn.style.background = ''
+        }, 1500)
+      }
+    } catch (err) {
+      console.error('Add to cart error:', err)
+      //alert('Failed to add item to cart')
+    }
+  }
+
   return (
     <div style={styles.container}>
       {/* Header */}
-      <div style={styles.header}>
-        <div style={styles.headerContent}>
-          <div style={styles.logo}>⚡</div>
-          <div>
-            <h1>ElectroMart</h1>
-            <p>Premium Electrical Equipment & Supplies</p>
+        <div style={{...styles.header, background: 'linear-gradient(45deg, #161616 0%, #363535 100%)'}}>
+          <div style={styles.headerContent}>
+            <div style={styles.logoSection}>
+              <img src="/assets/logo.png" alt="ElectroMart Logo" style={styles.logoImage} />
+              <div>
+                <h1>ElectroMart</h1>
+                <p>Premium Electrical Equipment & Supplies</p>
+              </div>
+            </div>
+            
+            <div style={styles.authSection}>
+              {user ? (
+                <>
+                  <button 
+                    onClick={() => setShowCart(true)} 
+                    style={styles.cartButton}
+                  >
+                    🛒 Cart ({cartData.totalItems})
+                  </button>
+                  <span style={styles.userGreeting}>👋 Hi, {user.name}!</span>
+                  <button onClick={handleLogout} style={styles.logoutButton}>
+                    🚪 Logout
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setShowAuthModal(true)} style={styles.signInButton}>
+                  🔐 Sign In / Sign Up
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div style={styles.main}>
+        {showAuthModal && (
+          <AuthModal 
+            onClose={() => setShowAuthModal(false)}
+            onSuccess={handleAuthSuccess}
+          />
+        )}
+
+        {showCart && (
+          <Cart 
+            isOpen={showCart}
+            onClose={() => setShowCart(false)}
+            cartData={cartData}
+            onUpdateCart={setCartData}
+          />
+        )}
+
+        <body>
+            <div style={styles.main}>
         {loading ? (
           <div style={styles.loadingContainer}>
             <div style={styles.spinner}></div>
@@ -58,19 +183,33 @@ export default function App() {
         ) : (
           <>
             {/* Stats */}
-            <div style={styles.statsContainer}>
-              <div style={styles.statCard}>
-                <div style={styles.statNumber}>{products.length}</div>
-                <div style={styles.statLabel}>Products</div>
+            
+            {/* Search Bar */}
+            <div style={styles.searchContainer}>
+              <div style={styles.searchWrapper}>
+                <span style={styles.searchIcon}>🔍</span>
+                <input
+                  type="text"
+                  placeholder="Search products by name or description..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={styles.searchInput}
+                />
+                {searchTerm && (
+                  <button 
+                    style={styles.clearButton}
+                    onClick={() => setSearchTerm('')}
+                    title="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
-              <div style={styles.statCard}>
-                <div style={styles.statNumber}>{products.filter(p => p.inStock).length}</div>
-                <div style={styles.statLabel}>In Stock</div>
-              </div>
-              <div style={styles.statCard}>
-                <div style={styles.statNumber}>${products.reduce((sum, p) => sum + p.price, 0).toFixed(2)}</div>
-                <div style={styles.statLabel}>Total Value</div>
-              </div>
+              {searchTerm && (
+                <p style={styles.searchResults}>
+                  Found {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''}
+                </p>
+              )}
             </div>
 
             {/* Products Grid */}
@@ -83,9 +222,14 @@ export default function App() {
                 <div style={styles.emptyIcon}>📦</div>
                 <p>No products available</p>
               </div>
+            ) : filteredProducts.length === 0 ? (
+              <div style={styles.emptyState}>
+                <div style={styles.emptyIcon}>🔍</div>
+                <p>No products match "{searchTerm}"</p>
+              </div>
             ) : (
               <div style={styles.grid}>
-                {products.map((p) => (
+                {filteredProducts.map((p) => (
                   <div key={p._id} style={styles.productCard}>
                     {/* Stock Badge */}
                     <div style={{
@@ -95,8 +239,21 @@ export default function App() {
                       {p.inStock ? '✓ In Stock' : 'Out of Stock'}
                     </div>
 
-                    {/* Product Icon */}
-                    <div style={styles.productIcon}>⚡</div>
+                    {/* Product Image */}
+                    <div style={styles.productIcon}>
+                      <img 
+                        src={p.image || '⚡'} 
+                        alt={p.name}
+                        style={{
+                          width: '100%',
+                          height: '200px',
+                          objectFit: 'cover',
+                          borderRadius: '8px',
+                          marginBottom: '15px'
+                        }}
+                        onError={(e) => e.target.textContent = '⚡'}
+                      />
+                    </div>
 
                     {/* Product Info */}
                     <h3 style={styles.productName}>{p.name}</h3>
@@ -104,11 +261,14 @@ export default function App() {
 
                     {/* Price */}
                     <div style={styles.priceContainer}>
-                      <span style={styles.price}>${p.price}</span>
+                      <span style={styles.price}>Rs.{p.price}</span>
                     </div>
 
                     {/* Add to Cart Button */}
-                    <button style={styles.addButton}>
+                    <button 
+                      style={styles.addButton}
+                      onClick={() => handleAddToCart(p)}
+                    >
                       🛒 Add to Cart
                     </button>
                   </div>
@@ -118,10 +278,10 @@ export default function App() {
           </>
         )}
       </div>
-
+      </body>
       {/* Footer */}
       <div style={styles.footer}>
-        <p>© 2025 ElectroMart. All rights reserved. | Built with React + Node.js</p>
+        <p>© 2025 ElectroMart. All rights reserved. | Designed by Pamuditha Sandaru Gunasena</p>
       </div>
     </div>
   )
@@ -148,12 +308,78 @@ const styles = {
     margin: '0 auto',
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: '20px',
+  },
+
+  logoSection: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '20px',
+  },
+
+  authSection: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '15px',
+  },
+
+  cartButton: {
+    padding: '10px 20px',
+    background: 'linear-gradient(135deg, #5e171d 0%, #363534 100%)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '10px',
+    fontSize: '1rem',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 4px 15px rgba(255, 0, 0, 0.94)',
+    whiteSpace: 'nowrap',
+  },
+
+  userGreeting: {
+    color: 'white',
+    fontSize: '1rem',
+    fontWeight: '600',
+  },
+
+  signInButton: {
+    padding: '12px 24px',
+    background: 'linear-gradient(135deg, #6d1823 0%, #1c1b1d 100%)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '10px',
+    fontSize: '1rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 4px 15px rgba(233, 60, 38, 0.4)',
+    whiteSpace: 'nowrap',
+  },
+
+  logoutButton: {
+    padding: '10px 20px',
+    background: 'rgba(255, 255, 255, 0.2)',
+    color: 'white',
+    border: '2px solid rgba(255, 255, 255, 0.3)',
+    borderRadius: '10px',
+    fontSize: '0.95rem',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    boxShadow: 'none',
+    whiteSpace: 'nowrap',
   },
 
   logo: {
     fontSize: '3rem',
     lineHeight: '1',
+  },
+
+  logoImage: {
+    height: '60px',
+    width: 'auto',
   },
 
   main: {
@@ -283,7 +509,64 @@ const styles = {
   price: {
     fontSize: '1.8rem',
     fontWeight: '700',
-    color: '#667eea',
+    color: '#a72626',
+  },
+
+  searchContainer: {
+    marginBottom: '40px',
+    animation: 'slideDown 0.5s ease',
+  },
+
+  searchWrapper: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+  },
+
+  searchIcon: {
+    position: 'absolute',
+    left: '20px',
+    fontSize: '1.3rem',
+    pointerEvents: 'none',
+  },
+
+  searchInput: {
+    width: '100%',
+    padding: '16px 50px 16px 55px',
+    fontSize: '1rem',
+    border: 'none',
+    borderRadius: '12px',
+    background: 'rgba(255, 255, 255, 0.95)',
+    backdropFilter: 'blur(10px)',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
+    transition: 'all 0.3s ease',
+    outline: 'none',
+    color: '#333',
+    fontWeight: '500',
+  },
+
+  clearButton: {
+    position: 'absolute',
+    right: '15px',
+    background: 'none',
+    border: 'none',
+    fontSize: '1.2rem',
+    cursor: 'pointer',
+    color: '#999',
+    padding: '5px 10px',
+    transition: 'color 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  searchResults: {
+    marginTop: '12px',
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: '0.9rem',
+    fontWeight: '500',
+    textAlign: 'center',
+    animation: 'fadeIn 0.3s ease',
   },
 
   addButton: {
@@ -314,7 +597,7 @@ const styles = {
   },
 
   footer: {
-    background: 'rgba(0, 0, 0, 0.3)',
+    background: 'linear-gradient(45deg, #161616 0%, #363535 100%)',
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
     padding: '20px',
