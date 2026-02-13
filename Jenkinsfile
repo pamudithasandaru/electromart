@@ -2,17 +2,15 @@ pipeline {
     agent any
 
     environment {
-        // Docker Hub image names (update if you want a different repo/org)
-        FRONTEND_IMAGE = "electromart-backend"
-        BACKEND_IMAGE  = "electromart-frontend"
-        // Point to your repository (this repo) so the job clones the correct code
+        DOCKERHUB_USER = "sang71315"
+        FRONTEND_IMAGE = "${DOCKERHUB_USER}/electromart-frontend"
+        BACKEND_IMAGE = "${DOCKERHUB_USER}/electromart-backend"
         GIT_REPO = "https://github.com/pamudithasandaru/electromart.git"
     }
 
     stages {
         stage('Clone Repository') {
             steps {
-                // clone the repository (main branch)
                 git branch: 'main', url: "${GIT_REPO}"
             }
         }
@@ -20,8 +18,8 @@ pipeline {
         stage('Build Frontend Docker Image') {
             steps {
                 script {
-                    echo "Building frontend image from ./frontend/Dockerfile"
-                    sh "docker build -t ${FRONTEND_IMAGE}:latest -f frontend/Dockerfile ./frontend"
+                    echo "Building frontend image: ${FRONTEND_IMAGE}:latest"
+                    sh "docker build -t ${FRONTEND_IMAGE}:latest -f frontend/Dockerfile frontend"
                 }
             }
         }
@@ -29,15 +27,14 @@ pipeline {
         stage('Build Backend Docker Image') {
             steps {
                 script {
-                    echo "Building backend image from ./backend/Dockerfile"
-                    sh "docker build -t ${BACKEND_IMAGE}:latest -f backend/Dockerfile ./backend"
+                    echo "Building backend image: ${BACKEND_IMAGE}:latest"
+                    sh "docker build -t ${BACKEND_IMAGE}:latest -f backend/Dockerfile backend"
                 }
             }
         }
 
         stage('Login to Docker Hub') {
             steps {
-                // expects a usernamePassword credential with id 'dockerhub'
                 withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     sh '''
                         echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
@@ -58,17 +55,16 @@ pipeline {
     }
 
     post {
-        always {
-            script {
-                // ensure logout to avoid leaving credentials in session
-                sh 'docker logout || true'
-            }
-        }
         success {
-            echo "Pipeline finished successfully"
+            echo "Pipeline completed successfully!"
         }
         failure {
             echo "Pipeline failed - check logs"
+        }
+        always {
+            script {
+                sh "docker logout"
+            }
         }
     }
 }
