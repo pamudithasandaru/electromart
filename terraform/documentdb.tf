@@ -15,7 +15,7 @@ resource "aws_docdb_cluster" "main" {
   engine                          = "docdb"
   master_username                 = var.mongodb_username
   master_password                 = var.mongodb_password
-  backup_retention_period         = 7
+  backup_retention_period         = 1
   preferred_backup_window         = "03:00-04:00"
   skip_final_snapshot             = true
   storage_encrypted               = true
@@ -51,10 +51,10 @@ resource "aws_docdb_cluster_parameter_group" "main" {
 
 # DocumentDB Cluster Instance
 resource "aws_docdb_cluster_instance" "main" {
-  count              = var.enable_mongodb ? 2 : 0
+  count              = var.enable_mongodb ? 1 : 0
   identifier         = "${var.project_name}-docdb-instance-${count.index + 1}"
   cluster_identifier = aws_docdb_cluster.main[0].id
-  instance_class     = "db.t4g.medium"
+  instance_class     = "db.t3g.medium"
   engine              = "docdb"
 
   tags = {

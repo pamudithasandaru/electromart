@@ -19,6 +19,6 @@ ecs_task_memory = "512"
 desired_count = 2
 
 # Database Configuration
-enable_mongodb = true
+enable_mongodb = false
 # Note: Set these via environment variables or terraform.tfvars for security
 mongodb_password="Mongo@2026#Prod"
