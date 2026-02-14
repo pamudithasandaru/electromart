@@ -126,6 +126,21 @@ pipeline {
                 }
             }
         }
+
+        stage('Update EC2 Containers') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                    dir('terraform-ec2') {
+                        sh '''
+                            EC2_IP=$(terraform output -raw public_ip)
+                            echo "Updating containers on EC2: $EC2_IP"
+                            ssh -o StrictHostKeyChecking=no -i /var/lib/jenkins/electromart-key ec2-user@$EC2_IP "cd /home/ec2-user/electromart && sudo docker-compose pull && sudo docker-compose up -d --force-recreate"
+                            echo "Containers updated successfully!"
+                        '''
+                    }
+                }
+            }
+        }
     }
 
     post {
