@@ -110,7 +110,7 @@ resource "aws_ecs_task_definition" "backend" {
       environment = [
         {
           name  = "MONGODB_URI"
-          value = var.enable_mongodb ? "mongodb://${var.mongodb_username}:${var.mongodb_password}@${aws_docdb_cluster.main[0].endpoint}:${aws_docdb_cluster.main[0].port}/electromart?tls=true&tlsCAFile=rds-combined-ca-bundle.pem&retryWrites=false" : "mongodb://mongo:27017/electromart"
+          value = var.enable_mongodb ? "mongodb://${var.mongodb_username}:${var.mongodb_password}@${aws_docdb_cluster.main[0].endpoint}:${aws_docdb_cluster.main[0].port}/electromart?tls=true&tlsCAFile=rds-combined-ca-bundle.pem&retryWrites=false" : var.mongodb_uri
         },
         {
           name  = "PORT"

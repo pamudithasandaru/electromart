@@ -76,6 +76,13 @@ variable "enable_mongodb" {
   default     = true
 }
 
+variable "mongodb_uri" {
+  description = "External MongoDB URI (used when enable_mongodb=false). Example: mongodb+srv://user:pass@cluster.mongodb.net/electromart"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "mongodb_username" {
   description = "MongoDB master username"
   type        = string
@@ -86,5 +93,6 @@ variable "mongodb_username" {
 variable "mongodb_password" {
   description = "MongoDB master password"
   type        = string
+  default     = ""
   sensitive   = true
 }

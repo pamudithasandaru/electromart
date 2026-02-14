@@ -20,5 +20,6 @@ desired_count = 2
 
 # Database Configuration
 enable_mongodb = false
-# Note: Set these via environment variables or terraform.tfvars for security
-mongodb_password="Mongo@2026#Prod"
+# MongoDB Atlas connection string
+mongodb_uri = "mongodb+srv://pamudithasandaru2002_db_user:dFnwOBk7KTdzTNuP@cluster0.s2fli9w.mongodb.net/electromart1?retryWrites=true&w=majority"
+mongodb_password = ""
