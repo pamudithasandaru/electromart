@@ -7,7 +7,6 @@ pipeline {
         BACKEND_IMAGE = "${DOCKERHUB_USER}/electromart-backend"
         GIT_REPO = "https://github.com/pamudithasandaru/electromart.git"
         AWS_REGION = "us-east-1"
-        TF_VAR_mongodb_password = credentials('mongodb-password')
     }
 
     stages {
@@ -58,7 +57,7 @@ pipeline {
         stage('Terraform Init') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
-                    dir('terraform') {
+                    dir('terraform-ec2') {
                         sh '''
                             echo "Initializing Terraform..."
                             terraform init -input=false
@@ -71,13 +70,10 @@ pipeline {
         stage('Terraform Plan') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
-                    dir('terraform') {
+                    dir('terraform-ec2') {
                         sh '''
                             echo "Planning Terraform deployment..."
-                            terraform plan -out=tfplan -input=false \
-                                -var="backend_image=${BACKEND_IMAGE}:latest" \
-                                -var="frontend_image=${FRONTEND_IMAGE}:latest" \
-                                -var="aws_region=${AWS_REGION}"
+                            terraform plan -out=tfplan -input=false
                         '''
                     }
                 }
@@ -87,7 +83,7 @@ pipeline {
         stage('Terraform Apply') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
-                    dir('terraform') {
+                    dir('terraform-ec2') {
                         sh '''
                             echo "Applying Terraform configuration..."
                             terraform apply -auto-approve tfplan
@@ -97,16 +93,32 @@ pipeline {
             }
         }
 
+        stage('Wait for EC2 Startup') {
+            steps {
+                echo "Waiting 60 seconds for EC2 instance to initialize..."
+                sh "sleep 60"
+            }
+        }
+
         stage('Get Deployment Info') {
             steps {
                 withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
-                    dir('terraform') {
+                    dir('terraform-ec2') {
                         sh '''
                             echo "=========================================="
                             echo "Deployment Complete!"
                             echo "=========================================="
+                            echo ""
                             echo "Application URL:"
-                            terraform output -raw application_url || true
+                            terraform output -raw application_url
+                            echo ""
+                            echo ""
+                            echo "API URL:"
+                            terraform output -raw api_url
+                            echo ""
+                            echo ""
+                            echo "SSH Command:"
+                            terraform output -raw ssh_command
                             echo ""
                             echo "=========================================="
                         '''
@@ -118,7 +130,7 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline completed successfully! Application deployed to AWS."
+            echo "Pipeline completed successfully! EC2 instance deployed to AWS."
         }
         failure {
             echo "Pipeline failed - check logs"
@@ -128,7 +140,7 @@ pipeline {
                 sh "docker logout || true"
             }
             // Clean up terraform plan file
-            dir('terraform') {
+            dir('terraform-ec2') {
                 sh "rm -f tfplan || true"
             }
         }
