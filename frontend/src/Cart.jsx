@@ -79,7 +79,7 @@ export default function Cart({ isOpen, onClose, cartData, onUpdateCart }) {
           {cartData.items.length === 0 ? (
             <div style={styles.emptyCart}>
               <div style={styles.emptyIcon}>🛍️</div>
-              <p style={styles.emptyText}>Cart is Empty</p>
+              <p style={styles.emptyText}>Empty Cart</p>
               <p style={styles.emptySubtext}>Add some products to get started!</p>
             </div>
           ) : (
